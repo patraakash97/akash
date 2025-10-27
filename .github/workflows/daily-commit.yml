@@ -1,0 +1,51 @@
+name: Daily Commit
+
+on:
+  schedule:
+    - cron: '12 0 * * *'   # runs every day at 00:12 UTC (05:42 IST)
+  workflow_dispatch:        # lets you trigger it manually now
+
+permissions:
+  contents: write           # needed to push commits
+
+concurrency:
+  group: daily-commit
+  cancel-in-progress: false
+
+jobs:
+  beat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # make sure we'll push with our own auth below
+          persist-credentials: false
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Heartbeat step — 23f3004144@ds.study.iitm.ac.in
+        run: |
+          mkdir -p .github/heartbeat
+          echo "beat at $(date -u +'%Y-%m-%dT%H:%M:%SZ') (run $GITHUB_RUN_ID)" >> .github/heartbeat/daily.log
+
+      - name: Create commit
+        run: |
+          git add .github/heartbeat/daily.log
+          # If nothing changed, force a new file so a commit is always created
+          if git diff --cached --quiet; then
+            echo "No diff; creating force file."
+            date -u +'%s' > ".github/heartbeat/force.$(date -u +%Y%m%d%H%M%S)"
+            git add .github/heartbeat/force.*
+          fi
+          git commit -m "chore: daily heartbeat (run $GITHUB_RUN_ID) [skip ci]"
+
+      - name: Push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Push to the same branch we checked out (usually the default branch)
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}" HEAD:${{ github.ref_name }}
